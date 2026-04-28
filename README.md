@@ -100,4 +100,14 @@ The API accepts both the documented route names and common Lovable-style aliases
 
 Call `/api/auth/register` or `/api/auth/login` to receive an access token. Store that token client-side and send it in the `Authorization` header for workflow calls.
 
+## Supabase/Lovable `has_role` permission error
+
+If the live Lovable app shows `permission denied for function has_role`, the app is still using a Supabase database/RLS helper. Apply this migration in that Supabase project:
+
+```text
+supabase/migrations/20260428130500_fix_has_role_permissions.sql
+```
+
+In Supabase, open **SQL Editor**, paste the migration SQL, and run it. The fix recreates `public.has_role(uuid, public.app_role)` as a `SECURITY DEFINER` helper and grants `EXECUTE` to `anon`, `authenticated`, and `service_role`, which browser requests need when RLS policies call `has_role(...)`.
+
 The deployed Lovable page advertises a privacy-first browser tracker: no screenshots or keystroke logging are implemented here. The backend stores only explicit timer/manual entries, idle seconds supplied by the client, Pomodoro sessions, project/client tags, and aggregate team/report data.
