@@ -81,6 +81,23 @@ All endpoints except `/health` and `/api/auth/*` require `Authorization: Bearer 
 
 ## Lovable frontend integration
 
-Point the frontend API base URL at this backend, then call `/api/auth/register` or `/api/auth/login` to receive an access token. Store that token client-side and send it in the `Authorization` header for workflow calls.
+Deploy this backend first, then point the Lovable frontend API base URL at the deployed backend URL. The existing Lovable URL will not automatically run this backend code until the frontend is configured to call it.
+
+Use these browser-facing settings when deploying:
+
+- `JWT_SECRET`: set to a long random value.
+- `CORS_ORIGIN`: set to `https://alyson-time-tracker.lovable.app` for production, or `*` during early testing.
+- `DATABASE_PATH`: set to a persistent disk path if the host supports one.
+
+The API accepts both the documented route names and common Lovable-style aliases:
+
+- Auth: `/api/auth/register` and `/api/auth/signup`
+- Clients: `/api/clients` and `/api/projects/clients`
+- Projects: `/api/projects` and `/api/projects/projects`
+- Timers: `/api/time-entries/start`, `/api/time-entries/stop`, `/api/time-entries/timer/start`, and `/api/time-entries/timer/stop`
+- Manual entries: `/api/time-entries/manual` and `POST /api/time-entries`
+- Pomodoro: `/api/pomodoro/start` and `POST /api/pomodoro`
+
+Call `/api/auth/register` or `/api/auth/login` to receive an access token. Store that token client-side and send it in the `Authorization` header for workflow calls.
 
 The deployed Lovable page advertises a privacy-first browser tracker: no screenshots or keystroke logging are implemented here. The backend stores only explicit timer/manual entries, idle seconds supplied by the client, Pomodoro sessions, project/client tags, and aggregate team/report data.

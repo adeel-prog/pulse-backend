@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import { ZodError } from "zod";
+import { env } from "./config/env";
 import { createDatabase } from "./db/database";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
@@ -17,11 +19,12 @@ export function createApp(databasePath?: string) {
 
   app.locals.db = db;
 
-  app.use(cors());
+  app.use(cors({ origin: env.corsOrigin === "*" ? true : env.corsOrigin }));
   app.use(express.json({ limit: "1mb" }));
 
   app.use("/health", healthRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api", projectRoutes);
   app.use("/api/projects", projectRoutes);
   app.use("/api/time-entries", timeEntriesRouter);
   app.use("/api/reports", reportRouter);
@@ -46,6 +49,10 @@ export function createApp(databasePath?: string) {
 
       if (err instanceof SyntaxError) {
         return res.status(400).json({ error: "Invalid JSON body" });
+      }
+
+      if (err instanceof ZodError) {
+        return res.status(400).json({ error: "Invalid request", details: err.issues });
       }
 
       console.error(err);

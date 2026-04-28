@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import { getDb } from "../db/database";
 import { requireAuth } from "../middleware/auth";
 import { PomodoroService } from "../services/pomodoroService";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -22,6 +21,14 @@ const idSchema = z.object({ id: z.string().min(1) });
 export function pomodoroRouter(service: PomodoroService): Router {
   const router = Router();
   router.use(requireAuth);
+
+  router.post(
+    "/start",
+    asyncHandler(async (req, res) => {
+      const session = service.start(req.user!.id, startSchema.parse(req.body));
+      res.status(201).json({ session });
+    })
+  );
 
   router.post(
     "/",
@@ -52,5 +59,6 @@ export function pomodoroRouter(service: PomodoroService): Router {
 }
 
 export function createPomodoroRouter(): Router {
+  const { getDb } = require("../db/database") as typeof import("../db/database");
   return pomodoroRouter(new PomodoroService(getDb()));
 }

@@ -48,7 +48,26 @@ router.post(
 );
 
 router.post(
+  "/start",
+  asyncHandler(async (req, res) => {
+    const service = new TimeService(getDb());
+    const entry = service.startTimer(req.auth!.userId, entrySchema.parse(req.body));
+    res.status(201).json({ entry });
+  })
+);
+
+router.post(
   "/timer/stop",
+  asyncHandler(async (req, res) => {
+    const body = stopSchema.parse(req.body);
+    const service = new TimeService(getDb());
+    const entry = service.stopTimer(req.auth!.userId, body.idleSeconds, body.endTime);
+    res.json({ entry });
+  })
+);
+
+router.post(
+  "/stop",
   asyncHandler(async (req, res) => {
     const body = stopSchema.parse(req.body);
     const service = new TimeService(getDb());
@@ -72,7 +91,25 @@ router.get(
 );
 
 router.post(
+  "/manual",
+  asyncHandler(async (req, res) => {
+    const service = new TimeService(getDb());
+    const entry = service.createManualEntry(req.auth!.userId, entrySchema.parse(req.body));
+    res.status(201).json({ entry });
+  })
+);
+
+router.post(
   "/",
+  asyncHandler(async (req, res) => {
+    const service = new TimeService(getDb());
+    const entry = service.createManualEntry(req.auth!.userId, entrySchema.parse(req.body));
+    res.status(201).json({ entry });
+  })
+);
+
+router.post(
+  "/manual",
   asyncHandler(async (req, res) => {
     const service = new TimeService(getDb());
     const entry = service.createManualEntry(req.auth!.userId, entrySchema.parse(req.body));

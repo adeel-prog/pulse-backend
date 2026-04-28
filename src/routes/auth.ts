@@ -26,6 +26,15 @@ router.post(
 );
 
 router.post(
+  "/signup",
+  asyncHandler(async (req, res) => {
+    const auth = createAuthService(getDb());
+    const input = registerSchema.parse(req.body);
+    res.status(201).json(auth.register(input));
+  })
+);
+
+router.post(
   "/login",
   asyncHandler(async (req, res) => {
     const auth = createAuthService(getDb());
