@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 from collections.abc import Iterable
 from pathlib import Path
 
 from .extractor import parse_profile_html
-from .fetcher import FetchError, fetch_url
+from .fetcher import ProfileFetcher
 from .models import CandidateProfile
 
 
@@ -27,6 +28,7 @@ def append_linkedin_data(
     html_directory: str | Path | None = None,
     timeout_seconds: float = 20.0,
     user_agent: str | None = None,
+    fetcher: Callable[[str], CandidateProfile] | ProfileFetcher | None = None,
 ) -> None:
     """Read candidate rows, append LinkedIn profile fields, and write a new CSV."""
     input_path = Path(input_csv)
@@ -39,7 +41,7 @@ def append_linkedin_data(
             raise ValueError(f"{input_path} does not contain a header row")
 
         selected_url_column = url_column or detect_url_column(reader.fieldnames)
-        output_fields = merge_fieldnames(reader.fieldnames, CandidateProfile.fieldnames())
+        output_fields = merge_fieldnames(reader.fieldnames, prefixed_fieldnames())
 
         with output_path.open("w", newline="", encoding="utf-8") as destination:
             writer = csv.DictWriter(destination, fieldnames=output_fields, extrasaction="ignore")
@@ -47,13 +49,16 @@ def append_linkedin_data(
 
             for row in reader:
                 url = (row.get(selected_url_column) or "").strip()
-                profile = profile_for_url(
-                    url,
-                    html_directory=html_path,
-                    timeout_seconds=timeout_seconds,
-                    user_agent=user_agent,
-                )
-                row.update(profile.as_dict())
+                if fetcher is not None:
+                    profile = profile_from_fetcher(url, fetcher)
+                else:
+                    profile = profile_for_url(
+                        url,
+                        html_directory=html_path,
+                        timeout_seconds=timeout_seconds,
+                        user_agent=user_agent,
+                    )
+                row.update(prefixed_profile_dict(profile))
                 writer.writerow(row)
 
 
@@ -67,17 +72,23 @@ def profile_for_url(
     if not url:
         return CandidateProfile(linkedin_url="", error="missing LinkedIn URL")
 
+    fetcher = ProfileFetcher(timeout=int(timeout_seconds), user_agent=user_agent)
+
     try:
-        html = read_saved_html(url, html_directory) if html_directory else fetch_url(
-            url,
-            timeout_seconds=timeout_seconds,
-            user_agent=user_agent,
-        )
-    except (OSError, FetchError, ValueError) as exc:
+        if html_directory:
+            html = read_saved_html(url, html_directory)
+            source = "html"
+        else:
+            result = fetcher.fetch(url)
+            html = result.content
+            source = result.source
+    except (OSError, RuntimeError, ValueError) as exc:
         return CandidateProfile(linkedin_url=url, source="error", error=str(exc))
 
     try:
-        return parse_profile_html(html, url=url)
+        profile = parse_profile_html(html, url=url)
+        profile.source = source
+        return profile
     except Exception as exc:  # Keep batch append jobs moving while surfacing bad rows.
         return CandidateProfile(linkedin_url=url, source="error", error=f"parse failed: {exc}")
 
@@ -102,6 +113,36 @@ def merge_fieldnames(original: Iterable[str], appended: Iterable[str]) -> list[s
             fields.append(fieldname)
             seen.add(fieldname)
     return fields
+
+
+def prefixed_fieldnames() -> list[str]:
+    return [f"linkedin_{fieldname}" for fieldname in CandidateProfile.output_fieldnames()]
+
+
+def prefixed_profile_dict(profile: CandidateProfile) -> dict[str, object]:
+    return {
+        f"linkedin_{fieldname}": value
+        for fieldname, value in profile.as_dict().items()
+    }
+
+
+def profile_from_fetcher(
+    url: str,
+    fetcher: Callable[[str], CandidateProfile] | ProfileFetcher,
+) -> CandidateProfile:
+    if isinstance(fetcher, ProfileFetcher):
+        try:
+            result = fetcher.fetch(url)
+            profile = parse_profile_html(result.content, url=url)
+            profile.source = result.source
+            return profile
+        except (OSError, RuntimeError, ValueError) as exc:
+            return CandidateProfile(linkedin_url=url, source="error", error=str(exc))
+
+    try:
+        return fetcher(url)
+    except Exception as exc:  # Keep batch append jobs moving while surfacing bad rows.
+        return CandidateProfile(linkedin_url=url, source="error", error=str(exc))
 
 
 def normalize_header(value: str) -> str:
