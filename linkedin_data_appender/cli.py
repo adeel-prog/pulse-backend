@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 
 from .appender import append_linkedin_data
-from .fetcher import RequestsFetcher, SavedHtmlFetcher
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,12 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    fetcher = SavedHtmlFetcher(args.html_dir) if args.html_dir else RequestsFetcher(timeout=args.timeout)
     append_linkedin_data(
         input_csv=args.input_csv,
         output_csv=args.output_csv,
         url_column=args.url_column,
-        fetcher=fetcher,
+        html_directory=args.html_dir,
+        timeout_seconds=args.timeout,
     )
 
 

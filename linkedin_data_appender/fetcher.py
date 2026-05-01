@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse, unquote
 from urllib.request import Request, urlopen
 
 
@@ -16,6 +17,10 @@ DEFAULT_USER_AGENT = (
 class FetchResult:
     content: str
     source: str
+
+
+class FetchError(RuntimeError):
+    """Raised when profile HTML cannot be fetched."""
 
 
 class ProfileFetcher:
@@ -40,13 +45,24 @@ class ProfileFetcher:
                     source="http",
                 )
         except HTTPError as exc:
-            raise RuntimeError(f"HTTP {exc.code} while fetching profile") from exc
+            raise FetchError(f"HTTP {exc.code} while fetching profile") from exc
         except URLError as exc:
-            raise RuntimeError(f"Network error while fetching profile: {exc.reason}") from exc
+            raise FetchError(f"Network error while fetching profile: {exc.reason}") from exc
 
     @staticmethod
     def _fetch_file(path_value: str) -> FetchResult:
-        path = Path(path_value)
+        parsed = urlparse(path_value)
+        path = Path(unquote(parsed.path)) if parsed.scheme == "file" else Path(path_value)
         if not path.exists():
-            raise RuntimeError(f"Profile snapshot not found: {path}")
+            raise FetchError(f"Profile snapshot not found: {path}")
         return FetchResult(content=path.read_text(encoding="utf-8"), source="file")
+
+
+def fetch_url(
+    url: str,
+    *,
+    timeout_seconds: float = 20.0,
+    user_agent: str | None = None,
+) -> str:
+    fetcher = ProfileFetcher(timeout=int(timeout_seconds), user_agent=user_agent or DEFAULT_USER_AGENT)
+    return fetcher.fetch(url).content
