@@ -48,6 +48,7 @@ class LinkedInHTMLExtractor(HTMLParser):
         self._current_tag: str | None = None
         self._current_attrs: dict[str, str] = {}
         self._buffer: list[str] = []
+        self._text_fragments: list[str] = []
         self._capture_script = False
         self._script_buffer: list[str] = []
 
@@ -85,6 +86,10 @@ class LinkedInHTMLExtractor(HTMLParser):
             self._script_buffer.append(data)
         elif self._current_tag == "title":
             self._buffer.append(data)
+        else:
+            text = normalize_text(data)
+            if text:
+                self._text_fragments.append(text)
 
     def extract(self, url: str, fetched_at: date | None = None) -> CandidateProfile:
         fetched_at = fetched_at or date.today()
@@ -128,7 +133,7 @@ class LinkedInHTMLExtractor(HTMLParser):
         return self._meta.get(key.lower(), "")
 
     def _combined_text(self) -> str:
-        values = [self._title, *self._meta.values(), *self._scripts]
+        values = [self._title, *self._meta.values(), *self._text_fragments, *self._scripts]
         return "\n".join(value for value in values if value)
 
     def _json_ld_objects(self) -> Iterable[dict[str, object]]:

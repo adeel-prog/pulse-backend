@@ -7,13 +7,15 @@ The tool reads an input CSV, fetches each LinkedIn URL, extracts profile facts
 available in the returned HTML, and writes a new CSV containing the original
 columns plus:
 
-- `full_name`
-- `current_job_title`
-- `total_experience`
-- `current_company_experience`
-- `company_name`
-- `source`
-- `error`
+- `linkedin_full_name`
+- `linkedin_current_job_title`
+- `linkedin_total_experience`
+- `linkedin_total_experience_months`
+- `linkedin_present_experience_in_current_company`
+- `linkedin_present_experience_months`
+- `linkedin_company_name`
+- `linkedin_source`
+- `linkedin_error`
 
 ## Important LinkedIn access note
 
@@ -28,7 +30,7 @@ where your use case and user consent are covered.
 ## Install
 
 ```bash
-python -m pip install -e .
+python3 -m pip install -e .
 ```
 
 ## CSV input
@@ -55,10 +57,10 @@ Use a different URL column:
 linkedin-data-appender candidates.csv enriched_candidates.csv --url-column profile_url
 ```
 
-Control request delay and timeout:
+Control request timeout:
 
 ```bash
-linkedin-data-appender candidates.csv enriched_candidates.csv --delay 3 --timeout 20
+linkedin-data-appender candidates.csv enriched_candidates.csv --timeout 20
 ```
 
 Parse saved LinkedIn HTML files without making network requests:
@@ -75,5 +77,5 @@ example `https://www.linkedin.com/in/jane-doe/` maps to `jane-doe.html`.
 Run tests with:
 
 ```bash
-python -m pytest
+python3 -m unittest
 ```
