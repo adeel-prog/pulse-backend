@@ -14,8 +14,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("output_csv", type=Path, help="Destination CSV file with appended fields.")
     parser.add_argument(
         "--url-column",
-        default="linkedin_url",
-        help="Input CSV column containing the LinkedIn profile URL. Defaults to linkedin_url.",
+        help=(
+            "Input CSV column containing the LinkedIn profile URL. "
+            "When omitted, common LinkedIn column names are auto-detected."
+        ),
     )
     parser.add_argument(
         "--html-dir",

@@ -26,9 +26,9 @@ class FetchError(RuntimeError):
 class ProfileFetcher:
     """Fetch profile HTML from local snapshots or public HTTP responses."""
 
-    def __init__(self, timeout: int = 20, user_agent: str = DEFAULT_USER_AGENT) -> None:
+    def __init__(self, timeout: float = 20.0, user_agent: str | None = None) -> None:
         self.timeout = timeout
-        self.user_agent = user_agent
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
 
     def fetch(self, url: str) -> FetchResult:
         if url.startswith(("http://", "https://")):
@@ -64,5 +64,5 @@ def fetch_url(
     timeout_seconds: float = 20.0,
     user_agent: str | None = None,
 ) -> str:
-    fetcher = ProfileFetcher(timeout=int(timeout_seconds), user_agent=user_agent or DEFAULT_USER_AGENT)
+    fetcher = ProfileFetcher(timeout=timeout_seconds, user_agent=user_agent)
     return fetcher.fetch(url).content

@@ -15,7 +15,6 @@ DEFAULT_URL_COLUMNS = (
     "linkedin",
     "linkedin_profile",
     "linkedin profile",
-    "linkedin_url",
     "candidate_linkedin_url",
 )
 
@@ -72,7 +71,7 @@ def profile_for_url(
     if not url:
         return CandidateProfile(linkedin_url="", error="missing LinkedIn URL")
 
-    fetcher = ProfileFetcher(timeout=int(timeout_seconds), user_agent=user_agent)
+    fetcher = ProfileFetcher(timeout=timeout_seconds, user_agent=user_agent)
 
     try:
         if html_directory:
