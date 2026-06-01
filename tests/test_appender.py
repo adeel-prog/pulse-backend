@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 
 from linkedin_data_appender.appender import append_linkedin_data
+from linkedin_data_appender.cli import build_parser
+from linkedin_data_appender.fetcher import DEFAULT_USER_AGENT, ProfileFetcher
 from linkedin_data_appender.models import CandidateProfile
 
 
@@ -67,6 +69,41 @@ class AppenderTests(unittest.TestCase):
             self.assertEqual(row["linkedin_current_job_title"], "Engineer")
             self.assertEqual(row["linkedin_company_name"], "Example Inc")
             self.assertEqual(row["linkedin_source"], "test")
+
+    def test_append_linkedin_data_auto_detects_candidate_linkedin_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            input_path = temp_path / "input.csv"
+            output_path = temp_path / "output.csv"
+            input_path.write_text(
+                "candidate_linkedin_url\nhttps://www.linkedin.com/in/example\n",
+                newline="",
+                encoding="utf-8",
+            )
+
+            append_linkedin_data(
+                input_path,
+                output_path,
+                fetcher=lambda url: CandidateProfile(
+                    linkedin_url=url,
+                    full_name="Auto Detected",
+                ),
+            )
+
+            with output_path.open(newline="", encoding="utf-8") as handle:
+                [row] = list(csv.DictReader(handle))
+
+            self.assertEqual(row["linkedin_full_name"], "Auto Detected")
+
+    def test_cli_auto_detects_url_column_when_not_supplied(self) -> None:
+        args = build_parser().parse_args(["input.csv", "output.csv"])
+
+        self.assertIsNone(args.url_column)
+
+    def test_profile_fetcher_uses_default_user_agent_when_none(self) -> None:
+        fetcher = ProfileFetcher(user_agent=None)
+
+        self.assertEqual(fetcher.user_agent, DEFAULT_USER_AGENT)
 
 
 if __name__ == "__main__":

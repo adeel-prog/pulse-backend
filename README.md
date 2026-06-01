@@ -7,13 +7,15 @@ The tool reads an input CSV, fetches each LinkedIn URL, extracts profile facts
 available in the returned HTML, and writes a new CSV containing the original
 columns plus:
 
+- `linkedin_linkedin_url`
 - `linkedin_full_name`
 - `linkedin_current_job_title`
-- `linkedin_total_experience`
 - `linkedin_total_experience_months`
-- `linkedin_present_experience_in_current_company`
+- `linkedin_total_experience`
 - `linkedin_present_experience_months`
+- `linkedin_present_experience_in_current_company`
 - `linkedin_company_name`
+- `linkedin_raw_headline`
 - `linkedin_source`
 - `linkedin_error`
 
@@ -36,7 +38,8 @@ python3 -m pip install -e .
 ## CSV input
 
 The input file must contain a column with the candidate LinkedIn URL. By
-default the column is named `linkedin_url`.
+default the tool auto-detects common names such as `linkedin_url`,
+`linkedin_profile`, and `candidate_linkedin_url`.
 
 Example:
 
@@ -77,5 +80,5 @@ example `https://www.linkedin.com/in/jane-doe/` maps to `jane-doe.html`.
 Run tests with:
 
 ```bash
-python3 -m unittest
+python3 -m unittest discover -s tests
 ```
