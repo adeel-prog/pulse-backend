@@ -1,0 +1,268 @@
+from __future__ import annotations
+
+import json
+import re
+from datetime import date
+from html.parser import HTMLParser
+from typing import Iterable
+
+from .models import CandidateProfile, Experience
+
+
+MONTHS = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
+
+
+class LinkedInHTMLExtractor(HTMLParser):
+    """Extract profile facts from LinkedIn public profile HTML or saved pages."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._title = ""
+        self._meta: dict[str, str] = {}
+        self._scripts: list[str] = []
+        self._current_tag: str | None = None
+        self._current_attrs: dict[str, str] = {}
+        self._buffer: list[str] = []
+        self._text_fragments: list[str] = []
+        self._capture_script = False
+        self._script_buffer: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {key.lower(): value or "" for key, value in attrs}
+        self._current_tag = tag
+        self._current_attrs = attributes
+
+        if tag == "meta":
+            key = attributes.get("property") or attributes.get("name")
+            content = attributes.get("content")
+            if key and content:
+                self._meta[key.lower()] = content.strip()
+        elif tag == "script":
+            script_type = attributes.get("type", "").lower()
+            self._capture_script = "json" in script_type or not script_type
+            self._script_buffer = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title":
+            self._title = normalize_text(" ".join(self._buffer))
+        elif tag == "script" and self._capture_script:
+            script = "".join(self._script_buffer).strip()
+            if script:
+                self._scripts.append(script)
+            self._capture_script = False
+            self._script_buffer = []
+
+        self._buffer = []
+        self._current_tag = None
+        self._current_attrs = {}
+
+    def handle_data(self, data: str) -> None:
+        if self._capture_script and self._current_tag == "script":
+            self._script_buffer.append(data)
+        elif self._current_tag == "title":
+            self._buffer.append(data)
+        else:
+            text = normalize_text(data)
+            if text:
+                self._text_fragments.append(text)
+
+    def extract(self, url: str, fetched_at: date | None = None) -> CandidateProfile:
+        fetched_at = fetched_at or date.today()
+        linked_data = list(self._json_ld_objects())
+        profile = CandidateProfile(linkedin_url=url, source="html")
+
+        profile.full_name = first_non_empty(
+            self._person_value(linked_data, "name"),
+            clean_title_name(self._meta_value("og:title")),
+            clean_title_name(self._title),
+        )
+        profile.current_job_title = first_non_empty(
+            self._person_value(linked_data, "jobTitle"),
+            headline_title(self._meta_value("og:title")),
+            headline_title(self._meta_value("description")),
+            headline_title(self._title),
+        )
+        profile.company_name = first_non_empty(
+            self._organization_name(linked_data),
+            headline_company(self._meta_value("og:title")),
+            headline_company(self._meta_value("description")),
+            headline_company(self._title),
+        )
+
+        experiences = list(experience_candidates(self._combined_text(), fetched_at))
+        if experiences:
+            current = next((item for item in experiences if item.is_current), experiences[0])
+            profile.current_job_title = profile.current_job_title or current.title
+            profile.company_name = profile.company_name or current.company
+            profile.present_experience_months = current.duration_months
+            profile.total_experience_months = sum(item.duration_months for item in experiences)
+
+        profile.raw_headline = first_non_empty(
+            self._meta_value("og:title"),
+            self._meta_value("description"),
+            self._title,
+        )
+        return profile
+
+    def _meta_value(self, key: str) -> str:
+        return self._meta.get(key.lower(), "")
+
+    def _combined_text(self) -> str:
+        values = [self._title, *self._meta.values(), *self._text_fragments, *self._scripts]
+        return "\n".join(value for value in values if value)
+
+    def _json_ld_objects(self) -> Iterable[dict[str, object]]:
+        for script in self._scripts:
+            try:
+                payload = json.loads(script)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(payload, list):
+                for item in payload:
+                    if isinstance(item, dict):
+                        yield item
+            elif isinstance(payload, dict):
+                yield payload
+
+    @staticmethod
+    def _person_value(objects: Iterable[dict[str, object]], key: str) -> str:
+        for item in objects:
+            item_type = item.get("@type") or item.get("type")
+            if item_type == "Person" and isinstance(item.get(key), str):
+                return str(item[key]).strip()
+        return ""
+
+    @staticmethod
+    def _organization_name(objects: Iterable[dict[str, object]]) -> str:
+        for item in objects:
+            item_type = item.get("@type") or item.get("type")
+            if item_type != "Person":
+                continue
+            works_for = item.get("worksFor")
+            if isinstance(works_for, dict) and isinstance(works_for.get("name"), str):
+                return str(works_for["name"]).strip()
+            if isinstance(works_for, str):
+                return works_for.strip()
+        return ""
+
+
+def parse_profile_html(html: str, url: str, fetched_at: date | None = None) -> CandidateProfile:
+    parser = LinkedInHTMLExtractor()
+    parser.feed(html)
+    return parser.extract(url=url, fetched_at=fetched_at)
+
+
+def normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def first_non_empty(*values: str | None) -> str:
+    for value in values:
+        normalized = normalize_text(value or "")
+        if normalized:
+            return normalized
+    return ""
+
+
+def clean_title_name(value: str) -> str:
+    value = normalize_text(value)
+    if not value:
+        return ""
+    value = re.sub(r"\s*\|\s*LinkedIn\s*$", "", value, flags=re.I)
+    value = re.sub(r"\s*-\s*LinkedIn\s*$", "", value, flags=re.I)
+    return value.split(" - ")[0].strip()
+
+
+def headline_title(value: str) -> str:
+    headline = headline_fragment(value)
+    if not headline:
+        return ""
+    for separator in (" at ", " @ "):
+        if separator in headline:
+            return headline.split(separator, 1)[0].strip()
+    return ""
+
+
+def headline_company(value: str) -> str:
+    headline = headline_fragment(value)
+    if not headline:
+        return ""
+    for separator in (" at ", " @ "):
+        if separator in headline:
+            return headline.split(separator, 1)[1].split("|", 1)[0].strip()
+    return ""
+
+
+def headline_fragment(value: str) -> str:
+    value = normalize_text(value)
+    if not value:
+        return ""
+    value = re.sub(r"\s*\|\s*LinkedIn\s*$", "", value, flags=re.I)
+    parts = [part.strip() for part in value.split(" - ") if part.strip()]
+    return parts[1] if len(parts) > 1 else ""
+
+
+DATE_RANGE_PATTERN = re.compile(
+    r"(?P<title>[A-Z][A-Za-z0-9 /&,+.#'-]{2,80}?)\s+at\s+"
+    r"(?P<company>[A-Z][A-Za-z0-9 /&,+.#'-]{1,80}?).{0,80}?"
+    r"(?P<start_month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?"
+    r"\s*(?P<start_year>19\d{2}|20\d{2})\s*[-–]\s*"
+    r"(?:(?P<end_month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?"
+    r"\s*(?P<end_year>19\d{2}|20\d{2})|(?P<present>Present|Current))",
+    re.I | re.S,
+)
+
+
+def experience_candidates(text: str, today: date) -> Iterable[Experience]:
+    for match in DATE_RANGE_PATTERN.finditer(text):
+        start_month = month_number(match.group("start_month")) or 1
+        start = date(int(match.group("start_year")), start_month, 1)
+        if match.group("present"):
+            end = today
+            is_current = True
+        else:
+            end_month = month_number(match.group("end_month")) or 12
+            end = date(int(match.group("end_year")), end_month, 1)
+            is_current = False
+
+        yield Experience(
+            title=normalize_text(match.group("title")),
+            company=normalize_text(match.group("company")),
+            start=start,
+            end=end,
+            is_current=is_current,
+        )
+
+
+def month_number(value: str | None) -> int | None:
+    if not value:
+        return None
+    return MONTHS.get(value.lower().rstrip("."))
