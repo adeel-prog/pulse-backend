@@ -240,19 +240,25 @@ def headline_fragment(value: str) -> str:
 
 DATE_RANGE_PATTERN = re.compile(
     r"(?P<title>[A-Z][A-Za-z0-9 /&,+.#'-]{2,80}?)\s+at\s+"
-    r"(?P<company>[A-Z][A-Za-z0-9 /&,+.#'-]{1,80}?).{0,80}?"
+    r"(?P<company>[A-Z][A-Za-z0-9 /&,+.#'-]{1,80}?)\s+"
     r"(?P<start_month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
     r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?"
     r"\s*(?P<start_year>19\d{2}|20\d{2})\s*[-–]\s*"
     r"(?:(?P<end_month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
     r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?"
     r"\s*(?P<end_year>19\d{2}|20\d{2})|(?P<present>Present|Current))",
-    re.I | re.S,
+    re.I,
 )
 
 
 def experience_candidates(text: str, today: date) -> Iterable[Experience]:
+    seen: set[tuple[str, str, date, date]] = set()
     for match in DATE_RANGE_PATTERN.finditer(text):
+        title = clean_experience_title(match.group("title"))
+        company = normalize_text(match.group("company"))
+        if not title or not company:
+            continue
+
         start_month = month_number(match.group("start_month")) or 1
         start = date(int(match.group("start_year")), start_month, 1)
         if match.group("present"):
@@ -263,13 +269,26 @@ def experience_candidates(text: str, today: date) -> Iterable[Experience]:
             end = date(int(match.group("end_year")), end_month, 1)
             is_current = False
 
+        key = (title.lower(), company.lower(), start, end)
+        if key in seen:
+            continue
+        seen.add(key)
+
         yield Experience(
-            title=normalize_text(match.group("title")),
-            company=normalize_text(match.group("company")),
+            title=title,
+            company=company,
             start=start,
             end=end,
             is_current=is_current,
         )
+
+
+def clean_experience_title(value: str) -> str:
+    title = normalize_text(value)
+    if " - " in title:
+        # Prefer the right-hand fragment when a person name leaked into the match.
+        title = title.split(" - ")[-1].strip()
+    return title
 
 
 def month_number(value: str | None) -> int | None:
