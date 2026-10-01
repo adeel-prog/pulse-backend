@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkedin-data-appender"
+version = "0.2.0"
+description = "Append candidate profile fields from LinkedIn profile URLs to CSV files."
+requires-python = ">=3.10"
+readme = "README.md"
+authors = [{ name = "Pulse Backend" }]
+
+[project.scripts]
+linkedin-data-appender = "linkedin_data_appender.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["linkedin_data_appender*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
